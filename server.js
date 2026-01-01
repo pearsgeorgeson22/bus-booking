@@ -29,32 +29,83 @@ const staticPath = __dirname;
 app.use(express.static(staticPath));
 app.use('/images', express.static(path.join(staticPath, 'images')));
 
-// Database connection with better error handling for serverless
+// Database connection with caching for serverless environments
+let isConnected = false;
+let connectionPromise = null;
+
 const connectDB = async () => {
-  try {
-    if (!process.env.MONGODB_URI) {
-      console.error('MONGODB_URI is not defined');
-      return;
-    }
-    
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-    });
-    
-    console.log('MongoDB connected:', conn.connection.host);
-  } catch (err) {
-    console.error('MongoDB connection error:', err.message);
-    // Don't exit in serverless environment
-    if (require.main === module) {
-      process.exit(1);
-    }
+  // Return existing connection if already connected
+  if (isConnected && mongoose.connection.readyState === 1) {
+    console.log('Using existing MongoDB connection');
+    return mongoose.connection;
   }
+
+  // Return existing promise if connection is in progress
+  if (connectionPromise) {
+    console.log('MongoDB connection in progress, waiting...');
+    return connectionPromise;
+  }
+
+  // Start new connection
+  if (!process.env.MONGODB_URI) {
+    throw new Error('MONGODB_URI is not defined in environment variables');
+  }
+
+  console.log('Connecting to MongoDB...');
+  
+  connectionPromise = mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 10000, // 10 seconds timeout
+    socketTimeoutMS: 45000, // 45 seconds socket timeout
+    maxPoolSize: 10, // Maintain up to 10 socket connections
+    minPoolSize: 1, // Maintain at least 1 socket connection
+    bufferMaxEntries: 0, // Disable mongoose buffering
+    bufferCommands: false, // Disable mongoose buffering
+  })
+  .then((conn) => {
+    isConnected = true;
+    console.log('MongoDB connected successfully:', conn.connection.host);
+    return conn;
+  })
+  .catch((err) => {
+    isConnected = false;
+    connectionPromise = null;
+    console.error('MongoDB connection error:', err.message);
+    throw err;
+  });
+
+  return connectionPromise;
 };
 
-// Connect to database
-connectDB();
+// Connect to database (non-blocking for serverless)
+connectDB().catch(err => {
+  console.error('Failed to connect to MongoDB:', err.message);
+  // Don't exit in serverless environment
+  if (require.main === module) {
+    process.exit(1);
+  }
+});
+
+// Middleware to ensure DB connection before handling requests
+const ensureDBConnection = async (req, res, next) => {
+  try {
+    // Check if already connected
+    if (mongoose.connection.readyState === 1) {
+      return next();
+    }
+
+    // Wait for connection
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error('Database connection failed:', error.message);
+    res.status(503).json({ 
+      error: 'Database connection failed',
+      message: 'Please check your MongoDB connection settings'
+    });
+  }
+};
 
 // Models
 const User = require('./models/User');
@@ -118,7 +169,7 @@ function isValidUPI(upiId) {
 // Routes
 
 // 1. User Registration
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', ensureDBConnection, async (req, res) => {
     try {
         const { name, email, mobile, password } = req.body;
         
@@ -160,7 +211,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // 2. User Login
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', ensureDBConnection, async (req, res) => {
     try {
         const { email, password } = req.body;
 
@@ -204,7 +255,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // 3. Search buses with future dates only
-app.get('/api/search-buses', async (req, res) => {
+app.get('/api/search-buses', ensureDBConnection, async (req, res) => {
     try {
         const { from, to, date } = req.query;
 
@@ -278,7 +329,7 @@ app.get('/api/search-buses', async (req, res) => {
 });
 
 // 3.5. Get route suggestions for autocomplete
-app.get('/api/route-suggestions', async (req, res) => {
+app.get('/api/route-suggestions', ensureDBConnection, async (req, res) => {
     try {
         const { q, type } = req.query; // q = query string, type = 'from' or 'to'
         
@@ -324,7 +375,7 @@ app.get('/api/route-suggestions', async (req, res) => {
 });
 
 // 4. Get bus details with seat status
-app.get('/api/bus/:id', async (req, res) => {
+app.get('/api/bus/:id', ensureDBConnection, async (req, res) => {
     try {
         const bus = await Bus.findById(req.params.id);
         if (!bus) {
@@ -348,7 +399,7 @@ app.get('/api/bus/:id', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-app.post('/api/book-seats', authenticateToken, async (req, res) => {
+app.post('/api/book-seats', ensureDBConnection, authenticateToken, async (req, res) => {
     try {
         const { busId, seats, passengerDetails, paymentMethod, journeyDate, upiId } = req.body;
         
@@ -445,7 +496,7 @@ app.post('/api/book-seats', authenticateToken, async (req, res) => {
 });
 
 // 6. Get user bookings
-app.get('/api/my-bookings', authenticateToken, async (req, res) => {
+app.get('/api/my-bookings', ensureDBConnection, authenticateToken, async (req, res) => {
     try {
         const bookings = await Booking.find({ user: req.user.userId })
             .populate('bus', 'busName busNumber from to departureTime arrivalTime departureDate')
@@ -457,7 +508,7 @@ app.get('/api/my-bookings', authenticateToken, async (req, res) => {
 });
 
 // 7. Cancel ticket with 80% refund
-app.post('/api/cancel-ticket', authenticateToken, async (req, res) => {
+app.post('/api/cancel-ticket', ensureDBConnection, authenticateToken, async (req, res) => {
     try {
         const { ticketId } = req.body;
 
@@ -509,7 +560,7 @@ app.post('/api/cancel-ticket', authenticateToken, async (req, res) => {
 });
 
 // 8. Download ticket as PDF
-app.get('/api/download-ticket/:ticketId', async (req, res) => {
+app.get('/api/download-ticket/:ticketId', ensureDBConnection, async (req, res) => {
     try {
         // Get token from query parameter for download (since window.open can't send headers)
         const token = req.query.token || req.headers['authorization']?.split(' ')[1];
@@ -680,7 +731,7 @@ app.get('/api/payment-qr', (req, res) => {
 });
 
 // 10. Initialize bus seats
-app.post('/api/initialize-bus/:id', async (req, res) => {
+app.post('/api/initialize-bus/:id', ensureDBConnection, async (req, res) => {
     try {
         const bus = await Bus.findById(req.params.id);
         if (!bus) {
