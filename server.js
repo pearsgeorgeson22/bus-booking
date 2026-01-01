@@ -52,26 +52,31 @@ const connectDB = async () => {
   }
 
   console.log('Connecting to MongoDB...');
+  console.log('Connection string:', process.env.MONGODB_URI.replace(/:[^:@]+@/, ':****@')); // Log without password
   
   connectionPromise = mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 10000, // 10 seconds timeout
+    serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
     socketTimeoutMS: 45000, // 45 seconds socket timeout
+    connectTimeoutMS: 30000, // 30 seconds connection timeout
     maxPoolSize: 10, // Maintain up to 10 socket connections
     minPoolSize: 1, // Maintain at least 1 socket connection
     bufferMaxEntries: 0, // Disable mongoose buffering
     bufferCommands: false, // Disable mongoose buffering
+    retryWrites: true,
   })
   .then((conn) => {
     isConnected = true;
     console.log('MongoDB connected successfully:', conn.connection.host);
+    console.log('Database:', conn.connection.name);
     return conn;
   })
   .catch((err) => {
     isConnected = false;
     connectionPromise = null;
     console.error('MongoDB connection error:', err.message);
+    console.error('Full error:', err);
     throw err;
   });
 
@@ -91,18 +96,35 @@ connectDB().catch(err => {
 const ensureDBConnection = async (req, res, next) => {
   try {
     // Check if already connected
-    if (mongoose.connection.readyState === 1) {
+    const readyState = mongoose.connection.readyState;
+    if (readyState === 1) {
+      // Connected
       return next();
     }
 
-    // Wait for connection
-    await connectDB();
+    // Wait for connection with timeout
+    console.log('Waiting for MongoDB connection, current state:', readyState);
+    const connection = await Promise.race([
+      connectDB(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Connection timeout after 30 seconds')), 30000)
+      )
+    ]);
+
+    // Verify connection is ready
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error('Connection established but not ready');
+    }
+
+    console.log('MongoDB connection verified, proceeding with request');
     next();
   } catch (error) {
-    console.error('Database connection failed:', error.message);
+    console.error('Database connection failed in middleware:', error.message);
+    console.error('Connection state:', mongoose.connection.readyState);
     res.status(503).json({ 
       error: 'Database connection failed',
-      message: 'Please check your MongoDB connection settings'
+      message: error.message || 'Please check your MongoDB connection settings',
+      details: 'Check Vercel logs for more information'
     });
   }
 };
