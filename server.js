@@ -29,13 +29,32 @@ const staticPath = __dirname;
 app.use(express.static(staticPath));
 app.use('/images', express.static(path.join(staticPath, 'images')));
 
-// Database connection
-mongoose.connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-})
-.then(() => console.log('MongoDB connected'))
-.catch(err => console.log('MongoDB connection error:', err));
+// Database connection with better error handling for serverless
+const connectDB = async () => {
+  try {
+    if (!process.env.MONGODB_URI) {
+      console.error('MONGODB_URI is not defined');
+      return;
+    }
+    
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+    });
+    
+    console.log('MongoDB connected:', conn.connection.host);
+  } catch (err) {
+    console.error('MongoDB connection error:', err.message);
+    // Don't exit in serverless environment
+    if (require.main === module) {
+      process.exit(1);
+    }
+  }
+};
+
+// Connect to database
+connectDB();
 
 // Models
 const User = require('./models/User');
