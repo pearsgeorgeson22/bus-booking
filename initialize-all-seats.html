@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Initialize All Bus Seats</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Initialize Seats for All Buses</h1>
+    <p>This will initialize seats for all buses that don't have seats yet.</p>
+    
+    <button onclick="initializeAllSeats()">Initialize All Bus Seats</button>
+    
+    <div id="log"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const p = document.createElement('p');
+            p.className = type;
+            p.textContent = message;
+            logDiv.appendChild(p);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        async function initializeAllSeats() {
+            document.getElementById('log').innerHTML = '';
+            log('🔄 Starting initialization...', 'info');
+            
+            try {
+                // Fetch all buses
+                const response = await fetch(`${API_BASE}/search-buses?from=&to=&date=2025-12-31`);
+                
+                // If that doesn't work, try getting directly from MongoDB
+                // You might need to create a new endpoint for this
+                
+                log('⚠️ Note: You need to run the mongosh script instead.', 'error');
+                log('Open mongosh and run the seat initialization script provided.', 'error');
+                
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
+
