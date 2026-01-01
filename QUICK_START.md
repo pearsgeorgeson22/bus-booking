@@ -39,9 +39,10 @@ git push -u origin main
 
 1. Go to: https://vercel.com
 2. Import from GitHub → Select your repo
-3. Add Environment Variables:
-   - `MONGODB_URI` = (your Atlas connection string)
-   - `JWT_SECRET` = (random secure string)
+3. Add Environment Variables (click "Environment Variables"):
+   - **Key:** `MONGODB_URI` | **Value:** (your Atlas connection string)
+   - **Key:** `JWT_SECRET` | **Value:** (random secure string)
+   - ⚠️ Enter ONLY Key and Value - no equals signs!
 4. Click Deploy
 5. Done! 🎉
 
@@ -65,6 +66,7 @@ git push -u origin main
 See detailed guides:
 - **GitHub Setup**: [GITHUB_SETUP.md](./GITHUB_SETUP.md)
 - **Full Deployment**: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
+- **Fix Vercel Errors**: [VERCEL_FIX.md](./VERCEL_FIX.md)
 
 ---
 

@@ -132,21 +132,23 @@ Since Vercel doesn't provide MongoDB, you need a cloud database:
    - **Install Command**: `npm install`
 
 4. **Environment Variables**:
-   Click "Environment Variables" and add:
+   Click "Environment Variables" and add these variables:
    
-   ```
-   MONGODB_URI = mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/bus-booking?retryWrites=true&w=majority
-   ```
-   (Use your MongoDB Atlas connection string)
+   **Variable 1:**
+   - **Key:** `MONGODB_URI`
+   - **Value:** `mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/bus-booking?retryWrites=true&w=majority`
+   - (Use your MongoDB Atlas connection string - replace username, password, and cluster details)
    
-   ```
-   JWT_SECRET = your-super-secret-jwt-key-change-this-in-production-2025
-   ```
-   (Use a long, random string - you can generate one at https://randomkeygen.com)
+   **Variable 2:**
+   - **Key:** `JWT_SECRET`
+   - **Value:** `your-super-secret-jwt-key-change-this-in-production-2025`
+   - (Use a long, random string - you can generate one at https://randomkeygen.com)
    
-   ```
-   PORT = (leave empty, Vercel sets this automatically)
-   ```
+   **Important:** 
+   - Only enter the **Key** and **Value** - no equals signs, no extra formatting
+   - Do NOT add PORT variable (Vercel sets this automatically)
+   - Make sure to select all environments (Production, Preview, Development)
+   - Click "Save" after adding each variable
 
 5. **Deploy**:
    - Click "Deploy"

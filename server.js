@@ -10,8 +10,8 @@ const path = require('path');
 
 dotenv.config();
 
-// Check if JWT_SECRET is set
-if (!process.env.JWT_SECRET) {
+// Check if JWT_SECRET is set (only exit in local development, not in serverless)
+if (!process.env.JWT_SECRET && require.main === module) {
     console.error('\n❌ ERROR: JWT_SECRET is not defined in .env file!');
     console.error('📝 Please create a .env file with JWT_SECRET');
     console.error('💡 Run: create-env.bat (Windows) or ./create-env.sh (Mac/Linux)\n');
@@ -23,8 +23,11 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname));
-app.use('/images', express.static(path.join(__dirname, 'images')));
+
+// Serve static files - handle both local and Vercel environments
+const staticPath = __dirname;
+app.use(express.static(staticPath));
+app.use('/images', express.static(path.join(staticPath, 'images')));
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI, {
@@ -680,6 +683,16 @@ app.post('/api/initialize-bus/:id', async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+});
+
+// Serve index.html for all non-API routes (SPA fallback)
+app.get('*', (req, res) => {
+    // Don't serve index.html for API routes
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    // Serve index.html for all other routes
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const PORT = process.env.PORT || 5000;
